@@ -35,7 +35,9 @@
 	 process_sm_iq/1, on_presence_update/4, import_info/0,
 	 import/5, import_start/2, store_last_info/4, get_last_info/2,
 	 remove_user/2, mod_opt_type/1, mod_options/1, mod_doc/0,
-	 register_user/2, depends/2, privacy_check_packet/4]).
+	 register_user/2, depends/2, privacy_check_packet/4,
+  process_sm_batch_iq/1,process_local_batch_iq/1
+]).
 
 -include("logger.hrl").
 -include_lib("xmpp/include/xmpp.hrl").
@@ -62,6 +64,12 @@ start(Host, Opts) ->
     Mod = gen_mod:db_mod(Opts, ?MODULE),
     Mod:init(Host, Opts),
     init_cache(Mod, Host, Opts),
+    xmpp:register_codec(vnc_batch),
+    xmpp:register_codec(vnc_batch_jid),
+    gen_iq_handler:add_iq_handler(ejabberd_local, Host,
+      ?LAST_BATCH_XMLNS, ?MODULE, process_local_batch_iq),
+    gen_iq_handler:add_iq_handler(ejabberd_sm, Host,
+      ?LAST_BATCH_XMLNS, ?MODULE, process_sm_batch_iq),
     gen_iq_handler:add_iq_handler(ejabberd_local, Host,
 				  ?NS_LAST, ?MODULE, process_local_iq),
     gen_iq_handler:add_iq_handler(ejabberd_sm, Host,
@@ -76,6 +84,12 @@ start(Host, Opts) ->
 		       on_presence_update, 50).
 
 stop(Host) ->
+  xmpp:unregister_codec(vnc_batch),
+  xmpp:unregister_codec(vnc_batch_jid),
+  gen_iq_handler:remove_iq_handler(ejabberd_local, Host,
+    ?LAST_BATCH_XMLNS),
+  gen_iq_handler:remove_iq_handler(ejabberd_sm, Host,
+    ?LAST_BATCH_XMLNS),
     ejabberd_hooks:delete(register_user, Host, ?MODULE,
 			  register_user, 50),
     ejabberd_hooks:delete(remove_user, Host, ?MODULE,
@@ -109,6 +123,13 @@ process_local_iq(#iq{type = set, lang = Lang} = IQ) ->
     xmpp:make_error(IQ, xmpp:err_not_allowed(Txt, Lang));
 process_local_iq(#iq{type = get} = IQ) ->
     xmpp:make_iq_result(IQ, #last{seconds = get_node_uptime()}).
+
+-spec process_local_batch_iq(iq()) -> iq().
+process_local_batch_iq(#iq{type = set, lang = Lang} = IQ) ->
+  Txt = ?T("Value 'set' of 'type' attribute is not allowed"),
+  xmpp:make_error(IQ, xmpp:err_not_allowed(Txt, Lang));
+process_local_batch_iq(#iq{type = get} = IQ) ->
+  xmpp:make_iq_result(IQ, #last{seconds = get_node_uptime()}).
 
 -spec get_node_uptime() -> non_neg_integer().
 %% @doc Get the uptime of the ejabberd node, expressed in seconds.
@@ -145,6 +166,48 @@ process_sm_iq(#iq{from = From, to = To, lang = Lang} = IQ) ->
 	    Txt = ?T("Not subscribed"),
 	    xmpp:make_error(IQ, xmpp:err_subscription_required(Txt, Lang))
     end.
+
+
+-spec process_sm_batch_iq(iq()) -> iq().
+process_sm_batch_iq(#iq{type = set, lang = Lang} = IQ) ->
+  Txt = ?T("Value 'set' of 'type' attribute is not allowed"),
+  xmpp:make_error(IQ, xmpp:err_not_allowed(Txt, Lang));
+process_sm_batch_iq( #iq{type = get, lang = _Lang, sub_els = [{last_batch, [],Users}]} = IQ) ->
+  ?INFO_MSG("Users = ~p~n", [Users]),
+  process_users(IQ,Users,[]).
+
+process_users(IQ,[],Res) ->
+  xmpp:make_iq_result(IQ, #last_batch{vnc_batch_item = Res});
+
+process_users(IQ,[H | Rest],Res) ->
+  User = H#jid.luser,
+    Server = H#jid.lserver,
+  case get_last_user(User, Server) of
+      {skip,Txt} ->
+        ?INFO_MSG("Sec = ~p~n", [Txt]),
+        process_users(IQ,Rest,[#result{seconds = 0, jid = H}|Res]);
+      {Sec, _Status} ->
+        ?INFO_MSG("Sec = ~p~n", [Sec]),
+        process_users(IQ,Rest,[#result{seconds = Sec, jid = H}|Res])
+   end.
+
+
+get_last_user(LUser, LServer) ->
+  case ejabberd_sm:get_user_resources(LUser, LServer) of
+    [] ->
+      case get_last(LUser, LServer) of
+        {error, _Reason} ->
+          {skip,?T("Database failure")};
+        not_found ->
+          {skip,?T("No info about last activity found")};
+        {ok, TimeStamp, Status} ->
+          TimeStamp2 = erlang:system_time(second),
+          {TimeStamp2 - TimeStamp,Status}
+      end;
+    _ ->
+      {skip,?T("No info about last activity found")}
+  end.
+
 
 -spec privacy_check_packet(allow | deny, c2s_state(), stanza(), in | out) -> allow | deny | {stop, deny}.
 privacy_check_packet(allow, C2SState,
