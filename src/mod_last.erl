@@ -65,6 +65,7 @@ start(Host, Opts) ->
     Mod:init(Host, Opts),
     init_cache(Mod, Host, Opts),
     xmpp:register_codec(vnc_batch),
+    xmpp:register_codec(vnc_batch_item),
     xmpp:register_codec(vnc_batch_jid),
     gen_iq_handler:add_iq_handler(ejabberd_local, Host,
       ?LAST_BATCH_XMLNS, ?MODULE, process_local_batch_iq),
@@ -85,6 +86,7 @@ start(Host, Opts) ->
 
 stop(Host) ->
   xmpp:unregister_codec(vnc_batch),
+  xmpp:unregister_codec(vnc_batch_item),
   xmpp:unregister_codec(vnc_batch_jid),
   gen_iq_handler:remove_iq_handler(ejabberd_local, Host,
     ?LAST_BATCH_XMLNS),
