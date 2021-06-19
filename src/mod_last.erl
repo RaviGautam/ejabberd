@@ -185,10 +185,10 @@ process_users(IQ,[H | Rest],Res) ->
   case get_last_user(User, Server) of
       {skip,Txt} ->
         ?INFO_MSG("Sec = ~p~n", [Txt]),
-        process_users(IQ,Rest,[#result{seconds = 0, jid = H}|Res]);
+        process_users(IQ,Rest,[#result_vnc{seconds = 0, jid = H}|Res]);
       {Sec, _Status} ->
         ?INFO_MSG("Sec = ~p~n", [Sec]),
-        process_users(IQ,Rest,[#result{seconds = Sec, jid = H}|Res])
+        process_users(IQ,Rest,[#result_vnc{seconds = Sec, jid = H}|Res])
    end.
 
 

@@ -25,17 +25,17 @@ tags() ->
      {<<"result">>, <<"jabber:server">>},
      {<<"result">>, <<"jabber:component:accept">>}].
 
-do_encode({result, _, _} = Result, TopXMLNS) ->
+do_encode({result_vnc, _, _} = Result, TopXMLNS) ->
     encode_vnc_batch_item(Result, TopXMLNS).
 
-do_get_name({result, _, _}) -> <<"result">>.
+do_get_name({result_vnc, _, _}) -> <<"result">>.
 
-do_get_ns({result, _, _}) -> <<"jabber:client">>.
+do_get_ns({result_vnc, _, _}) -> <<"jabber:client">>.
 
-pp(result, 2) -> [seconds, jid];
+pp(result_vnc, 2) -> [seconds, jid];
 pp(_, _) -> no.
 
-records() -> [{result, 2}].
+records() -> [{result_vnc, 2}].
 
 dec_int(Val, Min, Max) ->
     case erlang:binary_to_integer(Val) of
@@ -49,7 +49,7 @@ decode_vnc_batch_item(__TopXMLNS, __Opts,
 		      {xmlel, <<"result">>, _attrs, _els}) ->
     {Seconds, Jid} = decode_vnc_batch_item_attrs(__TopXMLNS,
 						 _attrs, undefined, undefined),
-    {result, Seconds, Jid}.
+    {result_vnc, Seconds, Jid}.
 
 decode_vnc_batch_item_attrs(__TopXMLNS,
 			    [{<<"seconds">>, _val} | _attrs], _Seconds, Jid) ->
@@ -69,7 +69,7 @@ decode_vnc_batch_item_attrs(__TopXMLNS, [], Seconds,
 					Seconds),
      decode_vnc_batch_item_attr_jid(__TopXMLNS, Jid)}.
 
-encode_vnc_batch_item({result, Seconds, Jid},
+encode_vnc_batch_item({result_vnc, Seconds, Jid},
 		      __TopXMLNS) ->
     __NewTopXMLNS = xmpp_codec:choose_top_xmlns(<<>>,
 						[<<"jabber:client">>,
